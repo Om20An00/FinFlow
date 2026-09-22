@@ -1,0 +1,381 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: finflow
+  labels: { app: gateway }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata:
+      labels: { app: gateway }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: gateway
+        image: finflow/gateway:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8080 }]
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8080 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8080 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway, namespace: finflow }
+spec:
+  selector: { app: gateway }
+  ports:
+  - { name: http, port: 8080, targetPort: 8080 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: gateway, namespace: finflow }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: gateway }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: finflow
+  labels: { app: user-service }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: user-service } }
+  template:
+    metadata:
+      labels: { app: user-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8081"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: user-service
+        image: finflow/user-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8081 }]
+        env:
+        - name: DB_PASSWORD
+          valueFrom: { secretKeyRef: { name: db-credentials, key: users } }
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8081 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8081 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: user-service, namespace: finflow }
+spec:
+  selector: { app: user-service }
+  ports:
+  - { name: http, port: 8081, targetPort: 8081 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallet-service
+  namespace: finflow
+  labels: { app: wallet-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: wallet-service } }
+  template:
+    metadata:
+      labels: { app: wallet-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8082"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: wallet-service
+        image: finflow/wallet-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8082 }]
+        env:
+        - name: DB_PASSWORD
+          valueFrom: { secretKeyRef: { name: db-credentials, key: wallet } }
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8082 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8082 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: wallet-service, namespace: finflow }
+spec:
+  selector: { app: wallet-service }
+  ports:
+  - { name: http, port: 8082, targetPort: 8082 }
+---
+# Headless service: DNS returns every wallet pod IP so the gRPC client can round-robin across pods.
+apiVersion: v1
+kind: Service
+metadata: { name: wallet-service-grpc, namespace: finflow }
+spec:
+  clusterIP: None
+  selector: { app: wallet-service }
+  ports:
+  - { name: grpc, port: 9092, targetPort: 9092 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: wallet-service, namespace: finflow }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: wallet-service }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: finflow
+  labels: { app: payment-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: payment-service } }
+  template:
+    metadata:
+      labels: { app: payment-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8083"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: payment-service
+        image: finflow/payment-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8083 }]
+        env:
+        - name: DB_PASSWORD
+          valueFrom: { secretKeyRef: { name: db-credentials, key: payment } }
+        - { name: WALLET_GRPC_TARGET, value: "dns:///wallet-service-grpc:9092" }
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8083 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8083 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: payment-service, namespace: finflow }
+spec:
+  selector: { app: payment-service }
+  ports:
+  - { name: http, port: 8083, targetPort: 8083 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: payment-service, namespace: finflow }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: payment-service }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: finflow
+  labels: { app: notification-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: notification-service } }
+  template:
+    metadata:
+      labels: { app: notification-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8084"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: notification-service
+        image: finflow/notification-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8084 }]
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8084 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8084 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: notification-service, namespace: finflow }
+spec:
+  selector: { app: notification-service }
+  ports:
+  - { name: http, port: 8084, targetPort: 8084 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: notification-service, namespace: finflow }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: notification-service }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-service
+  namespace: finflow
+  labels: { app: audit-service }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: audit-service } }
+  template:
+    metadata:
+      labels: { app: audit-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8085"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: audit-service
+        image: finflow/audit-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8085 }]
+        env:
+        - name: DB_PASSWORD
+          valueFrom: { secretKeyRef: { name: db-credentials, key: audit } }
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8085 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8085 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: audit-service, namespace: finflow }
+spec:
+  selector: { app: audit-service }
+  ports:
+  - { name: http, port: 8085, targetPort: 8085 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: finflow
+  labels: { app: analytics-service }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: analytics-service } }
+  template:
+    metadata:
+      labels: { app: analytics-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8086"
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: analytics-service
+        image: finflow/analytics-service:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 8086 }]
+        readinessProbe:
+          httpGet: { path: /actuator/health/readiness, port: 8086 }
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet: { path: /actuator/health/liveness, port: 8086 }
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 6
+        resources:
+          requests: { cpu: 150m, memory: 384Mi }
+          limits: { memory: 768Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: analytics-service, namespace: finflow }
+spec:
+  selector: { app: analytics-service }
+  ports:
+  - { name: http, port: 8086, targetPort: 8086 }

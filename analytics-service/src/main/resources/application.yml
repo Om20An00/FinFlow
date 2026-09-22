@@ -1,0 +1,12 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: analytics-service
+  config:
+    import: classpath:finflow-common.yml
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379

@@ -1,0 +1,12 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+  config:
+    import: classpath:finflow-common.yml
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379

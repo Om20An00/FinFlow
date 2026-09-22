@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: gateway
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['gateway:8080'] }]
+  - job_name: user-service
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['user-service:8081'] }]
+  - job_name: wallet-service
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['wallet-service:8082'] }]
+  - job_name: payment-service
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['payment-service:8083'] }]
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['notification-service:8084'] }]
+  - job_name: audit-service
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['audit-service:8085'] }]
+  - job_name: analytics-service
+    metrics_path: /actuator/prometheus
+    static_configs: [{ targets: ['analytics-service:8086'] }]

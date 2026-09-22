@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package finflow.wallet;
+
+option java_multiple_files = true;
+option java_package = "com.finflow.grpc.wallet";
+option java_outer_classname = "WalletProto";
+
+// Internal, latency-sensitive contract between Payment Service and Wallet Service.
+service WalletLedger {
+  // Atomically moves money between two wallets. Idempotent on payment_id.
+  rpc Transfer(TransferRequest) returns (TransferResponse);
+  rpc GetBalance(BalanceRequest) returns (BalanceResponse);
+}
+
+message TransferRequest {
+  string payment_id = 1;
+  string from_user_id = 2;
+  string to_user_id = 3;
+  string amount = 4;   // decimal string, e.g. "125.50" (never use floats for money)
+  string currency = 5;
+}
+
+message TransferResponse {
+  bool success = 1;
+  string code = 2;     // OK | ALREADY_PROCESSED | INSUFFICIENT_FUNDS | WALLET_NOT_FOUND | WALLET_FROZEN | INVALID
+  string message = 3;
+  string from_balance = 4;
+  string to_balance = 5;
+  string from_name = 6;
+  string to_name = 7;
+}
+
+message BalanceRequest {
+  string user_id = 1;
+}
+
+message BalanceResponse {
+  string user_id = 1;
+  string balance = 2;
+  string currency = 3;
+  bool frozen = 4;
+}

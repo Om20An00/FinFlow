@@ -1,0 +1,39 @@
+# Shared configuration imported by every service via: spring.config.import=classpath:finflow-common.yml
+finflow:
+  security:
+    jwk-set-uri: ${JWK_SET_URI:http://keycloak:8080/realms/finflow/protocol/openid-connect/certs}
+    issuer: ${ISSUER:http://localhost:8180/realms/finflow}
+
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        metadata.max.age.ms: 5000
+    listener:
+      ack-mode: manual
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-}]"

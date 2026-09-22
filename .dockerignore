@@ -1,0 +1,7 @@
+**/target
+.git
+ui
+k8s
+infra
+scripts
+*.md

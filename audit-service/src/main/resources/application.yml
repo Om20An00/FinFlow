@@ -1,0 +1,16 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: audit-service
+  config:
+    import: classpath:finflow-common.yml
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/audit_db}
+    username: ${DB_USER:audit_svc}
+    password: ${DB_PASSWORD:audit_pw}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none

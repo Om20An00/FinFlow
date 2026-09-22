@@ -1,0 +1,24 @@
+server:
+  port: 8082
+
+finflow:
+  grpc:
+    port: 9092
+
+spring:
+  application:
+    name: wallet-service
+  config:
+    import: classpath:finflow-common.yml
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/wallet_db}
+    username: ${DB_USER:wallet_svc}
+    password: ${DB_PASSWORD:wallet_pw}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379

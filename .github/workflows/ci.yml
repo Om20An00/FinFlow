@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (Maven reactor)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build & test all modules
+        run: mvn -B -ntp clean verify
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: '**/target/surefire-reports/*.xml'
+          if-no-files-found: ignore
+
+  docker-build:
+    name: Docker build (${{ matrix.service }})
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: gateway
+            port: 8080
+          - service: user-service
+            port: 8081
+          - service: wallet-service
+            port: 8082
+          - service: payment-service
+            port: 8083
+          - service: notification-service
+            port: 8084
+          - service: audit-service
+            port: 8085
+          - service: analytics-service
+            port: 8086
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            MODULE=${{ matrix.service }}
+            PORT=${{ matrix.port }}
+          push: false
+          tags: finflow/${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  keycloak-build:
+    name: Docker build (keycloak)
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build keycloak image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./infra/keycloak
+          push: false
+          tags: finflow/keycloak:ci
+          cache-from: type=gha,scope=keycloak
+          cache-to: type=gha,mode=max,scope=keycloak
+
+  ui-build:
+    name: Docker build (ui)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ui image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ui
+          push: false
+          tags: finflow/ui:ci
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,mode=max,scope=ui

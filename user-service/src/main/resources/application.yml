@@ -1,0 +1,16 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: user-service
+  config:
+    import: classpath:finflow-common.yml
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://postgres:5432/users_db}
+    username: ${DB_USER:users_svc}
+    password: ${DB_PASSWORD:users_pw}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none

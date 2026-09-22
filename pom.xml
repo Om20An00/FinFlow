@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.4</version>
+    <relativePath/>
+  </parent>
+  <groupId>com.finflow</groupId>
+  <artifactId>finflow</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>FinFlow</name>
+  <description>Secure distributed payment and wallet platform</description>
+
+  <modules>
+    <module>proto</module>
+    <module>common</module>
+    <module>outbox</module>
+    <module>gateway</module>
+    <module>user-service</module>
+    <module>wallet-service</module>
+    <module>payment-service</module>
+    <module>notification-service</module>
+    <module>audit-service</module>
+    <module>analytics-service</module>
+  </modules>
+
+  <properties>
+    <java.version>21</java.version>
+    <spring-cloud.version>2023.0.3</spring-cloud.version>
+    <grpc.version>1.64.0</grpc.version>
+    <protobuf.version>3.25.3</protobuf.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-dependencies</artifactId>
+        <version>${spring-cloud.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.grpc</groupId>
+        <artifactId>grpc-bom</artifactId>
+        <version>${grpc.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>${protobuf.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.finflow</groupId>
+        <artifactId>proto</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.finflow</groupId>
+        <artifactId>common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.finflow</groupId>
+        <artifactId>outbox</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
+</project>

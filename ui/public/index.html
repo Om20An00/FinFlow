@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FinFlow · Distributed Payment Platform</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💸</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="bg"></div>
+
+  <!-- ============================ LOGIN ============================ -->
+  <section id="login" class="hidden">
+    <div class="hero">
+      <div class="logo big"><span>Fin</span>Flow</div>
+      <h1>A distributed payment platform,<br>running for real.</h1>
+      <p class="sub">Spring Boot microservices · gRPC · OAuth2/OIDC · Kafka · PostgreSQL · Redis · Docker · Kubernetes</p>
+      <button class="btn primary xl" id="btn-login">Sign in with Keycloak →</button>
+      <div class="chips">
+        <span>OAuth2 + PKCE</span><span>JWT · RBAC</span><span>Outbox pattern</span><span>Idempotent payments</span><span>Kafka DLQ</span><span>Rate limiting</span>
+      </div>
+      <div class="creds">
+        <h4>Demo accounts</h4>
+        <div class="cred-grid">
+          <div><b>alice</b><i>alice123</i><em>customer</em></div>
+          <div><b>bob</b><i>bob123</i><em>customer</em></div>
+          <div><b>merchant</b><i>merchant123</i><em>merchant</em></div>
+          <div><b>admin</b><i>admin123</i><em>operations</em></div>
+        </div>
+        <p class="hint">You can also register a new account on the Keycloak page: the first login triggers a <code>UserRegistered</code> event and a wallet is created via Kafka.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ APP ============================ -->
+  <div id="app" class="hidden">
+    <aside>
+      <div class="logo"><span>Fin</span>Flow</div>
+      <nav id="nav">
+        <a data-tab="dashboard" class="active">▣ Dashboard</a>
+        <a data-tab="payments">⇄ Payments</a>
+        <a data-tab="insights" data-role="ADMIN,MERCHANT">◔ Insights</a>
+        <a data-tab="admin" data-role="ADMIN">⛨ Admin &amp; Audit</a>
+        <a data-tab="lab">⚗ Demo Lab</a>
+        <a data-tab="arch">◇ Architecture</a>
+      </nav>
+      <div class="side-foot">
+        <div class="who">
+          <div class="avatar" id="avatar">?</div>
+          <div><b id="who-name">…</b><div id="who-roles" class="roles"></div></div>
+        </div>
+        <button class="btn ghost" id="btn-logout">Sign out</button>
+      </div>
+    </aside>
+
+    <main>
+      <!-- ---------------- Dashboard ---------------- -->
+      <section id="tab-dashboard" class="tab">
+        <div class="grid two">
+          <div class="card wallet">
+            <div class="row between"><span class="label">Wallet balance</span><span id="w-badges"></span></div>
+            <div class="balance" id="w-balance">₹ —</div>
+            <div class="muted" id="w-sub">loading…</div>
+            <div class="row gap"><button class="btn small" id="btn-topup">+ Add ₹5,000</button></div>
+          </div>
+
+          <div class="card">
+            <div class="label">Send money</div>
+            <div class="form">
+              <select id="p-to"></select>
+              <input id="p-amount" type="number" min="1" step="0.01" placeholder="Amount (₹)" value="250">
+              <input id="p-note" type="text" maxlength="140" placeholder="Note (try #poison to trigger the DLQ)">
+              <button class="btn primary" id="btn-send">Pay securely</button>
+            </div>
+            <div id="p-result" class="result hidden"></div>
+          </div>
+        </div>
+
+        <div class="grid two">
+          <div class="card">
+            <div class="row between"><span class="label">Live notifications</span><span class="live"><i></i>Kafka → Redis</span></div>
+            <div id="notif-list" class="feed"></div>
+          </div>
+          <div class="card">
+            <div class="label">Wallet ledger</div>
+            <div id="ledger-list" class="feed"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------- Payments ---------------- -->
+      <section id="tab-payments" class="tab hidden">
+        <div class="card">
+          <div class="label">Payment history</div>
+          <div class="table-wrap"><table id="pay-table"><thead><tr><th>When</th><th>Direction</th><th>Counterparty</th><th>Note</th><th class="r">Amount</th><th>Status</th><th>Payment ID</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </section>
+
+      <!-- ---------------- Insights ---------------- -->
+      <section id="tab-insights" class="tab hidden">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid two">
+          <div class="card"><div class="label">Volume · last 7 days</div><div id="bars" class="bars"></div></div>
+          <div class="card"><div class="label">Top senders</div><div id="top" class="feed"></div></div>
+        </div>
+        <p class="hint">Computed in real time by the analytics consumer group (Kafka → Redis counters, idempotent per event id).</p>
+      </section>
+
+      <!-- ---------------- Admin ---------------- -->
+      <section id="tab-admin" class="tab hidden">
+        <div class="card">
+          <div class="label">Wallets (ROLE_ADMIN)</div>
+          <div class="table-wrap"><table id="adm-wallets"><thead><tr><th>User</th><th class="r">Balance</th><th>State</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="card">
+          <div class="row between"><span class="label">Trace a request by correlation id</span></div>
+          <div class="row gap"><input id="trace-id" type="text" placeholder="paste a correlation id (shown after every payment)" style="flex:1"><button class="btn small" id="btn-trace">Trace</button></div>
+          <div id="trace-out" class="feed"></div>
+        </div>
+        <div class="grid two">
+          <div class="card"><div class="label">Audit log (audit-service · audit_db)</div><div id="audit-list" class="feed mono"></div></div>
+          <div class="card"><div class="label">Dead-letter queue (after 3 retries)</div><div id="dlq-list" class="feed mono"></div></div>
+        </div>
+      </section>
+
+      <!-- ---------------- Demo lab ---------------- -->
+      <section id="tab-lab" class="tab hidden">
+        <p class="hint" style="margin-top:0">Each button runs real requests against the live stack. Read the console at the bottom.</p>
+        <div class="grid three">
+          <div class="card lab"><h3>Idempotent payments</h3><p>Sends the <b>same</b> payment twice with the same <code>Idempotency-Key</code>. Money moves once.</p><button class="btn small" data-lab="idem">Run</button></div>
+          <div class="card lab"><h3>Concurrent transfers</h3><p>Fires 6 parallel payments from one wallet. Optimistic locking + retries keep the balance exact.</p><button class="btn small" data-lab="concurrent">Run</button></div>
+          <div class="card lab"><h3>Rate limiting</h3><p>Bursts 30 payment reads through the gateway. The Redis token bucket answers <b>429</b>.</p><button class="btn small" data-lab="rate">Run</button></div>
+          <div class="card lab"><h3>Poison message → DLQ</h3><p>A note with <code>#poison</code> makes the notification consumer fail, retry 3× then dead-letter.</p><button class="btn small" data-lab="poison">Run</button></div>
+          <div class="card lab"><h3>Authorization (RBAC)</h3><p>Calls an ADMIN endpoint with your token. Customers receive <b>403</b>, admins succeed.</p><button class="btn small" data-lab="rbac">Run</button></div>
+          <div class="card lab"><h3>Security: no token</h3><p>Calls the API without a JWT and with a tampered one. Both get <b>401</b>.</p><button class="btn small" data-lab="noauth">Run</button></div>
+        </div>
+        <div class="card"><div class="row between"><span class="label">Console</span><button class="btn ghost small" id="btn-clear">clear</button></div><pre id="console"></pre></div>
+      </section>
+
+      <!-- ---------------- Architecture ---------------- -->
+      <section id="tab-arch" class="tab hidden">
+        <div class="card">
+          <div class="label">How a payment flows</div>
+          <div class="flow">
+            <div class="node">Browser<small>OAuth2 + PKCE</small></div><b>→</b>
+            <div class="node">API Gateway<small>JWT · RBAC · rate limit</small></div><b>→</b>
+            <div class="node">Payment Service<small>idempotency · outbox</small></div><b>⇢ gRPC</b>
+            <div class="node">Wallet Service<small>optimistic lock</small></div>
+          </div>
+          <div class="flow" style="margin-top:14px">
+            <div class="node">Outbox relay<small>DB → Kafka</small></div><b>→</b>
+            <div class="node kafka">Kafka<small>payments · wallet-events · user-events</small></div><b>→</b>
+            <div class="node">Notification<small>Redis</small></div>
+            <div class="node">Audit<small>audit_db</small></div>
+            <div class="node">Analytics<small>Redis</small></div>
+          </div>
+        </div>
+        <div class="grid two">
+          <div class="card"><div class="label">Engineering highlights</div>
+            <ul class="ticks">
+              <li>Keycloak OIDC, Authorization Code + PKCE, realm roles → Spring Security authorities</li>
+              <li>Every service re-validates the JWT (defence in depth)</li>
+              <li>gRPC for internal calls, REST at the edge, deadlines + correlation-id metadata</li>
+              <li>Transactional outbox with <code>FOR UPDATE SKIP LOCKED</code> relay</li>
+              <li>Idempotency: Redis fast path + unique DB constraint + idempotent gRPC + idempotent consumers</li>
+              <li>Optimistic locking (<code>@Version</code>) with bounded retries</li>
+              <li>Kafka manual ack, retry, dead-letter topics, consumer groups</li>
+              <li>Database per service, Flyway migrations</li>
+              <li>Micrometer → Prometheus → Grafana, correlation ids across HTTP/gRPC/Kafka</li>
+            </ul>
+          </div>
+          <div class="card"><div class="label">Open the tooling</div>
+            <div class="links" id="links"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

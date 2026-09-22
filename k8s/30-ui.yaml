@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ui, namespace: finflow }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ui } }
+  template:
+    metadata: { labels: { app: ui } }
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: ui
+        image: finflow/ui:1.0.0
+        imagePullPolicy: IfNotPresent
+        ports: [{ containerPort: 80 }]
+        resources: { requests: { cpu: 20m, memory: 32Mi }, limits: { memory: 128Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ui, namespace: finflow }
+spec:
+  selector: { app: ui }
+  ports: [{ port: 80, targetPort: 80 }]
