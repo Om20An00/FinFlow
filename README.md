@@ -128,20 +128,39 @@ flowchart TB
 
 </div>
 
-```text
-POST /api/v1/payments → gateway validates JWT + rate limits → idempotency check (Redis → unique constraint)
-   → write PENDING payment + PaymentCreated outbox row (one transaction) → gRPC Transfer → Wallet Service
-   → debit/credit with optimistic locking + ledger + outbox events → final status + outbox row
-   → outbox relay publishes to Kafka → Notification / Audit / Analytics consume in separate consumer groups
-```
-
 ---
 
 ## 📸 Demo
 
 <div align="center">
 
-*Add a GIF or screenshots of the Sign-in → Send Money → Grafana dashboard flow here — a 20–30s clip of the demo script below makes this section do a lot of work for a recruiter skimming the repo.*
+| Landing Page | User Dashboard |
+|:---:|:---:|
+| <img src="https://github.com/Om20An00/FinFlow/blob/db49bba518b5fb8e2ce351c07ae834cb7155fac3/Demo%20Pics/0.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/3.png" width="420"/> |
+
+| Live Notifications & Wallet Ledger | Payment History |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/4.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/5.png" width="420"/> |
+
+| Demo Lab — Chaos & Resilience Tests | Demo Lab — Live Console Output |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/7.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/10.png" width="420"/> |
+
+| Admin & Audit — Freeze / Trace / DLQ | Real-Time Analytics Dashboard |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/14.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/13.png" width="420"/> |
+
+| In-App Architecture View | Prometheus — Service Discovery |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/6.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/15.png" width="420"/> |
+
+| Grafana — Payments & Latency | Grafana — Resilience & Outbox Metrics |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/17.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/16.png" width="420"/> |
+
+| Kafka UI — Topics & Dead Letter Queues | Kafka UI — Consumer Groups |
+|:---:|:---:|
+| <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/21.png" width="420"/> | <img src="https://raw.githubusercontent.com/Om20An00/FinFlow/c971905b45dca8b2efbbaa21ce4604130658a12a/Demo%20Pics/23.png" width="420"/> |
 
 </div>
 
