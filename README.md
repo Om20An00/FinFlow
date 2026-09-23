@@ -104,7 +104,7 @@ flowchart TB
   DOWNSTREAM -.metrics.-> P
 ```
 
-> **Reading the diagram:** the gateway proxies REST calls to **all seven** services (not just the three domain services) — notification, audit and analytics each expose their own `/api/v1/...` read endpoints in addition to consuming Kafka. gRPC is used for exactly one call: Payment → Wallet `Transfer`. Every service — not only the gateway — independently validates the Keycloak JWT via JWKS (defense in depth), and every service exposes `/actuator/prometheus` for scraping.
+> **Reading the diagram:** the gateway proxies REST calls to **all seven** services (not just the three domain services) notification, audit and analytics each expose their own `/api/v1/...` read endpoints in addition to consuming Kafka. gRPC is used for exactly one call: Payment → Wallet `Transfer`. Every service not only the gateway independently validates the Keycloak JWT via JWKS (defense in depth), and every service exposes `/actuator/prometheus` for scraping.
 
 ---
 
