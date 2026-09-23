@@ -34,9 +34,9 @@
 
 ## 📖 About This Project
 
-**FinFlow** is a production-style fintech backend built to demonstrate real distributed systems engineering. It's a full payment & wallet platform split across six Spring Boot microservices, talking to each other over **gRPC**, coordinated through a **transactional outbox → Kafka** pipeline, secured with **OAuth2/OIDC (Keycloak)**, and deployable to **Kubernetes** with autoscaling and health probes.
+**FinFlow** is a production-style fintech backend built to demonstrate real distributed systems engineering. It's a full payment & wallet platform split across **seven Spring Boot microservices**, talking to each other over **gRPC** and **Kafka**, coordinated through a **transactional outbox → Kafka** pipeline, secured with **OAuth2/OIDC (Keycloak)**, and deployable to **Kubernetes** with autoscaling and health probes.
 
-> 🧠 **Author's note:** Every service gateway, user, wallet, payment, notification, audit, and analytics the outbox relay, the idempotency layer, the gRPC contracts, and the observability stack were designed and built end to end as a hands on deep dive into how real payment infrastructure handles consistency, failure, and scale.
+> 🧠 **Author's note:** Every service — gateway, user, wallet, payment, notification, audit, and analytics — the outbox relay, the idempotency layer, the gRPC contract, and the observability stack were designed and built end to end as a hands-on deep dive into how real payment infrastructure handles consistency, failure, and scale.
 
 ---
 
@@ -70,7 +70,7 @@ flowchart TB
     GW["Spring Cloud Gateway<br/>JWT · RBAC · Rate Limit"]
   end
 
-  KC -. issues tokens / JWKS .-> GW
+  KC -. JWKS: every service<br/>validates the JWT itself .-> GW
 
   subgraph CORE["⚙️ Core Domain Services"]
     direction LR
@@ -79,26 +79,29 @@ flowchart TB
     PS["💳 Payment Service<br/><small>payment_db · Redis</small>"]
   end
 
+  subgraph DOWNSTREAM["📡 Downstream Services"]
+    direction LR
+    NS["🔔 Notification<br/><small>Redis</small>"]
+    AS["📝 Audit<br/><small>audit_db</small>"]
+    AN["📊 Analytics<br/><small>Redis</small>"]
+  end
+
   GW --> US
   GW --> WS
   GW --> PS
+  GW -.REST reads.-> NS
+  GW -.REST reads.-> AS
+  GW -.REST reads.-> AN
   PS ==>|"⚡ gRPC Transfer"| WS
 
   subgraph BUS["📦 Event Backbone"]
     K{{"🔀 Kafka"}}
   end
 
-  PS -.->|outbox| K
-  WS -.->|outbox| K
-  US -.->|outbox| K
+  PS -.->|outbox: payments| K
+  WS -.->|outbox: wallet-events| K
+  US -.->|outbox: user-events| K
   K -.->|user-events| WS
-
-  subgraph DOWNSTREAM["📡 Downstream Consumers"]
-    direction LR
-    NS["🔔 Notification<br/><small>Redis</small>"]
-    AS["📝 Audit<br/><small>audit_db</small>"]
-    AN["📊 Analytics<br/><small>Redis</small>"]
-  end
 
   K --> NS
   K --> AS
@@ -110,9 +113,9 @@ flowchart TB
     P["Prometheus"] --> G["Grafana"]
   end
 
-  PS -. metrics .-> P
-  WS -. metrics .-> P
   GW -. metrics .-> P
+  CORE -. metrics .-> P
+  DOWNSTREAM -. metrics .-> P
 
   style EDGE fill:#F8ECDD,stroke:#8B5E3C,stroke-width:1.5px
   style GATEWAY fill:#E8C4A2,stroke:#4A2E1F,stroke-width:2px
@@ -127,6 +130,8 @@ flowchart TB
 ```
 
 </div>
+
+> **Reading the diagram:** the gateway proxies REST calls to **all seven** services (not just the three domain services) — notification, audit and analytics each expose their own `/api/v1/...` read endpoints in addition to consuming Kafka. gRPC is used for exactly one call: Payment → Wallet `Transfer`. Every service — not only the gateway — independently validates the Keycloak JWT via JWKS (defense in depth), and every service exposes `/actuator/prometheus` for scraping.
 
 ---
 
@@ -170,17 +175,17 @@ flowchart TB
 
 | Category | What's Implemented |
 |---|---|
-| **Distributed transactions** | Transactional outbox pattern (`OutboxService`, `OutboxRelay` with `FOR UPDATE SKIP LOCKED`) no dual write between Postgres and Kafka |
-| **Service-to-service RPC** | gRPC with deadlines and correlation id propagation (`wallet.proto`, `WalletClient`) REST/JSON only at the browser edge |
-| **Idempotency** | Redis + unique DB constraint on payment creation, `transfer_log` on wallet transfers, idempotent Kafka consumers (unique `event_id`) |
-| **Concurrency control** | Optimistic locking (`@Version`) on wallet balances with jittered retry on conflict |
-| **Reconciliation** | Background job retries `PENDING` payments safely, since the Transfer RPC is idempotent |
-| **Kafka resilience** | 3 retries → dead letter topics (`<topic>.DLT`), manual ack, DLQ handling in the audit consumer |
-| **AuthN/AuthZ** | OAuth2/OIDC via Keycloak, JWT validated independently at every service (gateway is not a trust boundary), RBAC via `@PreAuthorize` |
-| **Rate limiting** | Redis token bucket limiter per user at the API gateway |
-| **Observability** | Actuator + Micrometer custom metrics (`payment_success_total`, `wallet_operation_latency`, `kafka_dead_letters_total`), Grafana dashboard, correlation id traced across HTTP → gRPC → Kafka |
-| **Database per service** | Isolated schemas with Flyway migrations per service |
-| **Deployment** | Docker Compose for local dev; Kubernetes manifests with Deployments, probes, resource limits, HPA, and a headless service for gRPC load balancing |
+| **Distributed transactions** | Transactional outbox pattern (`OutboxService`, `OutboxRelay` with `FOR UPDATE SKIP LOCKED`) — no dual write between Postgres and Kafka |
+| **Service-to-service RPC** | gRPC with deadlines and correlation-id propagation, used for the Payment → Wallet `Transfer` call (`wallet.proto`, `WalletClient`) — REST/JSON everywhere else, including at the browser edge |
+| **Idempotency** | Redis fast-path cache + unique DB constraint on payment creation (`PaymentService`), a `transfer_log` table on wallet transfers (`WalletService`), idempotent Kafka consumers keyed on `event_id` |
+| **Concurrency control** | Optimistic locking (`@Version`) on `Wallet` and `Payment` rows, with jittered retry (up to 8 attempts) on conflict |
+| **Reconciliation** | Scheduled job retries `PENDING` payments left over from an ambiguous gRPC failure — safe because `Transfer` is idempotent on payment id |
+| **Kafka resilience** | 3 retries → dead-letter topics (`<topic>.DLT`), manual ack, DLQ archiving in the audit consumer |
+| **AuthN/AuthZ** | OAuth2/OIDC via Keycloak; JWT validated independently at every service (the gateway is not the only trust boundary); RBAC via `@PreAuthorize` and gateway route rules |
+| **Rate limiting** | Redis token-bucket limiter per authenticated user, applied per route at the API gateway |
+| **Observability** | Actuator + Micrometer custom metrics (`payment_success_total`, `wallet_operation_latency`, `kafka_dead_letters_total`, `outbox_published_total`, …) from every service, scraped by Prometheus, visualized in a provisioned Grafana dashboard, correlation id traced across HTTP → gRPC → Kafka |
+| **Database per service** | Isolated Postgres databases/logins for user, wallet, payment and audit services, each with its own Flyway migration (`V1__init.sql`) |
+| **Deployment** | Docker Compose for local dev; Kubernetes manifests with Deployments, readiness/liveness probes, resource limits, HPA on the horizontally-scaled services (gateway, wallet, payment, notification), and a headless Service for gRPC client-side load balancing |
 
 ---
 
@@ -204,7 +209,7 @@ flowchart TB
 
 ## 🚀 Run It (One Command)
 
-**Requirements:** Docker Desktop (or Docker Engine + compose plugin), ~8 GB RAM free. Nothing else Maven and JDK 21 run inside Docker.
+**Requirements:** Docker Desktop (or Docker Engine + compose plugin), ~8 GB RAM free. Nothing else — Maven and JDK 21 run inside Docker.
 
 ```bash
 git clone https://github.com/Om20An00/FinFlow.git
@@ -229,13 +234,13 @@ Stop and wipe everything: `./stop.sh` &nbsp;·&nbsp; end-to-end smoke test: `./s
 
 ## 🎬 Demo Script (≈4 minutes)
 
-1. **Sign in** as `alice` note the redirect to the real Keycloak login page (OIDC + PKCE).
-2. **Send money** to Bob watch the notification land (Kafka → Redis) and the ledger update. Badges show whether each read was served from Redis or Postgres.
-3. **Demo Lab → Idempotent payments**: fire the same request twice, get charged once. **Concurrent transfers**: 6 parallel payments settle to the exact correct balance.
-4. **Demo Lab → Rate limiting**: trigger `429`s. **RBAC**: `403` as Alice on an admin action. **No token**: `401`.
+1. **Sign in** as `alice` — note the redirect to the real Keycloak login page (OIDC + PKCE).
+2. **Send money** to Bob — watch the notification land (Kafka → Redis) and the ledger update. Badges show whether each read was served from Redis or Postgres.
+3. **Demo Lab → Idempotent payments**: fire the same request twice with the same `Idempotency-Key`, get charged once. **Concurrent transfers**: 6 parallel ₹10 payments from the same wallet all settle correctly, guarded by `@Version` optimistic locking.
+4. **Demo Lab → Rate limiting**: 30 parallel requests trigger `429`s from the gateway's Redis token bucket. **RBAC**: `403` as Alice on an admin action. **No token**: `401`.
 5. Send a payment with `#poison` in the note → sign in as `admin` → **Admin & Audit**: inspect the dead-lettered message, freeze Bob's wallet, trace the correlation id across services.
 6. Open **Grafana** (payments/min, gRPC latency, consumer lag, DLQ counter) and **Kafka UI** (topics, consumer groups, `payments.DLT`).
-7. `docker compose ps` everything healthy. On Kubernetes: `kubectl scale deployment payment-service --replicas=4` and watch the HPA react.
+7. `docker compose ps` — everything healthy. On Kubernetes: `kubectl scale deployment payment-service --replicas=4` and watch it stay there (or get reconciled back by the HPA once CPU load settles).
 
 ---
 
@@ -243,18 +248,18 @@ Stop and wipe everything: `./stop.sh` &nbsp;·&nbsp; end-to-end smoke test: `./s
 
 | Topic | Implementation |
 |---|---|
-| OAuth2 / OIDC, JWT, RBAC | `infra/keycloak/finflow-realm.json`, `common/.../SecurityConfig.java`, `gateway/.../GatewaySecurityConfig.java`, `@PreAuthorize` |
+| OAuth2 / OIDC, JWT, RBAC | `infra/keycloak/finflow-realm.json`, `common/.../SecurityConfig.java`, `gateway/.../GatewaySecurityConfig.java`, `@PreAuthorize` on controllers |
 | gRPC | `proto/src/main/proto/wallet.proto`, `wallet-service/.../grpc/*`, `payment-service/.../grpc/WalletClient.java` |
 | Transactional outbox | `outbox/` module — `OutboxService`, `OutboxRelay` (`FOR UPDATE SKIP LOCKED`) |
-| Idempotency | `PaymentService.create` (Redis + unique constraint), `WalletService.transfer` (`transfer_log`), idempotent consumers |
-| Optimistic locking | `Wallet.@Version`, retry loop in `WalletGrpcService` |
+| Idempotency | `PaymentService.create` (Redis + unique constraint), `WalletService.transfer` (`transfer_log`), idempotent Kafka consumers |
+| Optimistic locking | `Wallet.@Version`, `Payment.@Version`, retry loop in `WalletGrpcService` |
 | Reconciliation | `PaymentService.reconcilePending` |
 | Kafka retry / DLQ | `KafkaCommonConfig` (3 retries, `<topic>.DLT`), `NotificationConsumer`, `AuditConsumer.onDeadLetter` |
-| Database per service + Flyway | `*/src/main/resources/db/migration`, `infra/postgres/init.sql` |
-| Redis | Wallet read cache (15s TTL), payment idempotency cache, gateway rate limiter, notifications, analytics counters |
+| Database per service + Flyway | `*/src/main/resources/db/migration/V1__init.sql`, `infra/postgres/init.sql` |
+| Redis | Wallet read cache (15s TTL), payment idempotency cache, gateway rate limiter, notifications feed, analytics counters |
 | Rate limiting | Gateway `RequestRateLimiter` — Redis token bucket per user |
-| Observability | Actuator + Micrometer, custom metrics, Grafana dashboard, correlation id across HTTP → gRPC → Kafka |
-| Docker / Kubernetes | `Dockerfile`, `docker-compose.yml`, `k8s/` — Deployments, probes, resources, HPA, headless service for gRPC LB |
+| Observability | Actuator + Micrometer on every service, custom metrics, Grafana dashboard, correlation id across HTTP → gRPC → Kafka |
+| Docker / Kubernetes | `Dockerfile`, `docker-compose.yml`, `k8s/` — Deployments, probes, resources, HPA, headless Service for gRPC LB |
 
 ---
 
@@ -268,16 +273,18 @@ kubectl -n finflow port-forward svc/gateway 8080:8080 &
 kubectl -n finflow port-forward svc/keycloak 8180:8080 &
 ```
 
+`deploy.sh` builds the images locally and applies the manifests via `kubectl` — there is currently no automated CD pipeline; GitHub Actions runs build/test and Docker image builds only (`push: false`).
+
 ---
 
 ## 🌱 Design Decisions & Trade-offs (Interview Material)
 
-- **Why gRPC only internally?** Binary, typed, HTTP/2 deadlines for latency-sensitive service-to-service calls; REST/JSON stays at the edge for browsers.
-- **Why an outbox?** A DB transaction can't span PostgreSQL and Kafka. Writing the event in the same transaction and relaying it later gives at-least-once delivery without dual-write bugs consumers are idempotent, so duplicates are harmless.
+- **Why gRPC only for Payment → Wallet?** Binary, typed, HTTP/2 deadlines for the one latency-sensitive, high-volume internal call; REST/JSON is simpler everywhere else, including at the browser edge.
+- **Why an outbox?** A DB transaction can't span PostgreSQL and Kafka. Writing the event in the same transaction and relaying it later gives at-least-once delivery without dual-write bugs — consumers are idempotent, so duplicates are harmless.
 - **Why is the gRPC call outside the DB transaction?** Holding a connection/locks during a network call is an availability risk. The trade-off is the `PENDING` state plus the reconciler.
 - **Why optimistic locking?** Wallet contention is low; `@Version` avoids row locks and deadlocks, and conflicts retry with jittered backoff.
 - **Why does every service re-validate the JWT?** The gateway isn't a trust boundary you should rely on alone.
-- **Known simplifications:** one Postgres container hosting four databases (separate logins), single-broker Kafka, Keycloak in dev mode, HTTP instead of TLS, no service mesh/circuit breaker (Resilience4j is the natural next step), 15s wallet cache TTL. Each is called out because you should be able to explain what you'd change for production.
+- **Known simplifications:** one Postgres container hosting four databases (separate logins), single-broker Kafka, Keycloak in dev mode, HTTP instead of TLS, no service mesh/circuit breaker (Resilience4j is the natural next step), 15s wallet cache TTL, no automated deployment pipeline (image build/push is CI-only; cluster deploy is manual via `k8s/deploy.sh`). Each is called out because you should be able to explain what you'd change for production.
 
 ---
 
@@ -285,7 +292,7 @@ kubectl -n finflow port-forward svc/keycloak 8180:8080 &
 
 - `docker compose logs -f <service>` (e.g. `payment-service`). Services wait on Postgres/Kafka/Redis health checks, so the first minute of "restarts" is really just slow startup.
 - **Login redirect fails:** open the UI at exactly `http://localhost:3000` (the Keycloak redirect URI) with Keycloak at `http://localhost:8180`.
-- **401 after login:** token issuer must be `http://localhost:8180/realms/finflow` (`KC_HOSTNAME_URL`) don't change the Keycloak port mapping without updating `ISSUER` and `ui/public/config.js`.
+- **401 after login:** token issuer must be `http://localhost:8180/realms/finflow` (`KC_HOSTNAME_URL`) — don't change the Keycloak port mapping without updating `ISSUER` and `ui/public/config.js`.
 - **Port already in use:** change the left side of the `ports:` mappings in `docker-compose.yml` (and `ui/public/config.js`).
 - **Out of memory:** give Docker at least 6–8 GB (Settings → Resources).
 
@@ -294,8 +301,9 @@ kubectl -n finflow port-forward svc/keycloak 8180:8080 &
 ## 🔮 Roadmap
 
 - [ ] Resilience4j circuit breakers on the gRPC client
-- [ ] mTLS between services (currently HTTP internally)
+- [ ] mTLS between services (currently plaintext HTTP/gRPC internally)
 - [ ] Multi-broker Kafka cluster
+- [ ] Automated deployment (CD) to Kubernetes from GitHub Actions
 - [ ] Saga-style multi-hop transfers (beyond single wallet-to-wallet)
 - [ ] Contract tests for the gRPC + Kafka event schemas
 
@@ -308,9 +316,3 @@ kubectl -n finflow port-forward svc/keycloak 8180:8080 &
 Every service, the outbox relay, the idempotency layer, and the observability stack in this repository were designed and built end-to-end as an independent, hands-on project.
 
 <div align="center">
-
-If this project helped you or you found it interesting, consider giving it a ⭐!
-
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:E8C4A2,50:8B5E3C,100:4A2E1F&height=120&section=footer" />
-
-</div>
