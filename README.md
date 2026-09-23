@@ -42,48 +42,34 @@
 
 ## 🏗️ Architecture
 
-<div align="center">
-
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {
-  'primaryColor':'#D9A579',
-  'primaryTextColor':'#2E1B0E',
-  'primaryBorderColor':'#4A2E1F',
-  'lineColor':'#8B5E3C',
-  'secondaryColor':'#E8C4A2',
-  'tertiaryColor':'#F3DFC6',
-  'fontFamily':'Fira Code, monospace',
-  'clusterBkg':'#F8ECDD',
-  'clusterBorder':'#8B5E3C',
-  'edgeLabelBackground':'#F3DFC6'
-}}}%%
 flowchart TB
-  subgraph EDGE["🌐 Edge Layer"]
+  subgraph EDGE["Edge Layer"]
     direction LR
-    UI["🖥️ Browser UI<br/><i>OAuth2 + PKCE</i>"]
-    KC[("🔐 Keycloak<br/>OIDC Provider")]
+    UI["Browser UI (OAuth2 + PKCE)"]
+    KC[("Keycloak — OIDC Provider")]
   end
 
   UI -->|JWT bearer token| GW
 
-  subgraph GATEWAY["🚪 API Gateway"]
-    GW["Spring Cloud Gateway<br/>JWT · RBAC · Rate Limit"]
+  subgraph GATEWAY["API Gateway"]
+    GW["Spring Cloud Gateway — JWT / RBAC / Rate Limit"]
   end
 
-  KC -. JWKS: every service<br/>validates the JWT itself .-> GW
+  KC -. JWKS: each service validates JWT .-> GW
 
-  subgraph CORE["⚙️ Core Domain Services"]
+  subgraph CORE["Core Domain Services"]
     direction LR
-    US["👤 User Service<br/><small>users_db</small>"]
-    WS["💰 Wallet Service<br/><small>wallet_db · Redis</small>"]
-    PS["💳 Payment Service<br/><small>payment_db · Redis</small>"]
+    US["User Service (users_db)"]
+    WS["Wallet Service (wallet_db, Redis)"]
+    PS["Payment Service (payment_db, Redis)"]
   end
 
-  subgraph DOWNSTREAM["📡 Downstream Services"]
+  subgraph DOWNSTREAM["Downstream Services"]
     direction LR
-    NS["🔔 Notification<br/><small>Redis</small>"]
-    AS["📝 Audit<br/><small>audit_db</small>"]
-    AN["📊 Analytics<br/><small>Redis</small>"]
+    NS["Notification Service (Redis)"]
+    AS["Audit Service (audit_db)"]
+    AN["Analytics Service (Redis)"]
   end
 
   GW --> US
@@ -92,44 +78,31 @@ flowchart TB
   GW -.REST reads.-> NS
   GW -.REST reads.-> AS
   GW -.REST reads.-> AN
-  PS ==>|"⚡ gRPC Transfer"| WS
+  PS ==>|gRPC Transfer| WS
 
-  subgraph BUS["📦 Event Backbone"]
-    K{{"🔀 Kafka"}}
+  subgraph BUS["Event Backbone"]
+    K{{"Kafka"}}
   end
 
-  PS -.->|outbox: payments| K
-  WS -.->|outbox: wallet-events| K
-  US -.->|outbox: user-events| K
-  K -.->|user-events| WS
+  PS -.outbox: payments.-> K
+  WS -.outbox: wallet-events.-> K
+  US -.outbox: user-events.-> K
+  K -.user-events.-> WS
 
   K --> NS
   K --> AS
   K --> AN
-  AS -.->|dead letters| DLT[["☠️ *.DLT"]]
+  AS -.dead letters.-> DLT[["*.DLT"]]
 
-  subgraph OBS["📈 Observability"]
+  subgraph OBS["Observability"]
     direction LR
     P["Prometheus"] --> G["Grafana"]
   end
 
-  GW -. metrics .-> P
-  CORE -. metrics .-> P
-  DOWNSTREAM -. metrics .-> P
-
-  style EDGE fill:#F8ECDD,stroke:#8B5E3C,stroke-width:1.5px
-  style GATEWAY fill:#E8C4A2,stroke:#4A2E1F,stroke-width:2px
-  style CORE fill:#F3DFC6,stroke:#8B5E3C,stroke-width:1.5px
-  style BUS fill:#D9A579,stroke:#4A2E1F,stroke-width:2.5px
-  style DOWNSTREAM fill:#F8ECDD,stroke:#8B5E3C,stroke-width:1.5px
-  style OBS fill:#F3DFC6,stroke:#8B5E3C,stroke-width:1.5px
-  style K fill:#8B5E3C,color:#fff,stroke:#2E1B0E,stroke-width:2px
-  style DLT fill:#4A2E1F,color:#fff,stroke:#2E1B0E
-  style GW fill:#C68863,color:#2E1B0E,stroke:#4A2E1F,stroke-width:2px
-  style KC fill:#A9714D,color:#fff,stroke:#4A2E1F
+  GW -.metrics.-> P
+  CORE -.metrics.-> P
+  DOWNSTREAM -.metrics.-> P
 ```
-
-</div>
 
 > **Reading the diagram:** the gateway proxies REST calls to **all seven** services (not just the three domain services) — notification, audit and analytics each expose their own `/api/v1/...` read endpoints in addition to consuming Kafka. gRPC is used for exactly one call: Payment → Wallet `Transfer`. Every service — not only the gateway — independently validates the Keycloak JWT via JWKS (defense in depth), and every service exposes `/actuator/prometheus` for scraping.
 
